@@ -1,0 +1,94 @@
+# ${IMAGE} substituted by train.sh from .image-ref-p5en-efa.
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: fsdp-train
+spec:
+  failurePolicy:
+    maxRestarts: 5
+    restartStrategy: Recreate
+  network:
+    enableDNSHostnames: true
+    subdomain: fsdp-train
+  replicatedJobs:
+    - name: workers
+      replicas: 1
+      template:
+        spec:
+          parallelism: 2
+          completions: 2
+          backoffLimit: 0
+          template:
+            spec:
+              restartPolicy: Never
+              nodeSelector:
+                karpenter.sh/nodepool: efa-gpu
+              # One rank per node so a node failure loses exactly one rank.
+              affinity:
+                podAntiAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    - labelSelector:
+                        matchExpressions:
+                          - key: jobset.sigs.k8s.io/jobset-name
+                            operator: In
+                            values: ["fsdp-train"]
+                      topologyKey: kubernetes.io/hostname
+              tolerations:
+                - key: nvidia.com/gpu
+                  operator: Exists
+                  effect: NoSchedule
+              containers:
+                - name: trainer
+                  image: ${IMAGE}
+                  env:
+                    - name: MASTER_ADDR
+                      value: "fsdp-train-workers-0-0.fsdp-train"
+                    - name: MASTER_PORT
+                      value: "29500"
+                    - name: NNODES
+                      value: "2"
+                    - name: NODE_RANK
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+                    - name: HF_HOME
+                      value: "/fsx/hf-cache"
+                    - name: FI_PROVIDER
+                      value: "efa"
+                    - name: NCCL_DEBUG
+                      value: "INFO"
+                    # Force NCCL bootstrap onto the pod's routable primary interface (eth0),
+                    # not loopback — otherwise cross-node rank connect fails (Connect to 127.0.0.1).
+                    - name: NCCL_SOCKET_IFNAME
+                      value: "eth0"
+                    - name: PYTHONUNBUFFERED
+                      value: "1"
+                  args:
+                    - "--nnodes=$(NNODES)"
+                    - "--nproc_per_node=8"
+                    - "--node_rank=$(NODE_RANK)"
+                    - "--master_addr=$(MASTER_ADDR)"
+                    - "--master_port=$(MASTER_PORT)"
+                    - "--rdzv_id=fsdp-train"
+                    - "/workspace/train_fsdp.py"
+                    - "--output-dir=/fsx/checkpoints"
+                    - "--max-steps=2000"
+                    - "--save-steps=50"
+                  resources:
+                    limits:
+                      nvidia.com/gpu: "8"
+                      vpc.amazonaws.com/efa: "16"
+                      memory: "512000Mi"
+                  volumeMounts:
+                    - name: fsx
+                      mountPath: /fsx
+                    - name: shmem
+                      mountPath: /dev/shm
+              volumes:
+                - name: fsx
+                  persistentVolumeClaim:
+                    claimName: fsx-efa-checkpoints
+                - name: shmem
+                  emptyDir:
+                    medium: Memory
+                    sizeLimit: 32Gi

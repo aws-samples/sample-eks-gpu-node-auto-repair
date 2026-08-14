@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fsx-efa-checkpoints
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: fsx-efa-sc
+  resources:
+    requests:
+      # 2.4 TiB: fits multiple 32B sharded checkpoints (~100-130 GB each) + model/dataset cache.
+      storage: 2400Gi

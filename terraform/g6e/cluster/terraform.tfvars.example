@@ -1,0 +1,7 @@
+region             = "us-west-2"
+cluster_name       = "eks-gpu-node-auto-repair"
+kubernetes_version = "1.36"
+tags = {
+  Project = "sample-eks-gpu-node-auto-repair"
+  Owner   = "your-alias"
+}

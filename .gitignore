@@ -1,0 +1,29 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# Local
+.env
+*.log
+kubeconfig*
+.image-ref
+.image-ref-efa
+.image-ref-p5en-efa
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Internal-only docs — never publish to this repo (architecture is folded into README.md)
+docs/

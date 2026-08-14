@@ -1,0 +1,24 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - ECR="${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+      - IMAGE="${ECR}/${ECR_REPO}:${IMAGE_TAG}"
+      # AWS Deep Learning Containers are NOT replicated to every region (some regions lack them).
+      # ${DLC_IMAGE} therefore points at a DLC SOURCE region (default us-west-2); we pull it
+      # cross-region and push the derived image to our target-region ECR.
+      - DLC_ACCOUNT=763104351884
+      - DLC_SOURCE_REGION="${DLC_SOURCE_REGION:-us-west-2}"
+      - DLC_REGISTRY="${DLC_ACCOUNT}.dkr.ecr.${DLC_SOURCE_REGION}.amazonaws.com"
+      - echo "Logging in to DLC registry (${DLC_SOURCE_REGION}) and target ECR (${AWS_DEFAULT_REGION})"
+      - aws ecr get-login-password --region "${DLC_SOURCE_REGION}" | docker login --username AWS --password-stdin "${DLC_REGISTRY}"
+      - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR}"
+  build:
+    commands:
+      - echo "Building ${IMAGE} from ${DLC_IMAGE}"
+      - docker build --build-arg DLC_IMAGE="${DLC_IMAGE}" -t "${IMAGE}" .
+  post_build:
+    commands:
+      - docker push "${IMAGE}"
+      - echo "Pushed ${IMAGE}"

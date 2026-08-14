@@ -1,0 +1,14 @@
+apiVersion: eks.amazonaws.com/v1
+kind: NodeClass
+metadata:
+  name: gpu
+spec:
+  role: # filled at apply time by nodepool-apply.sh via envsubst
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: ${CLUSTER_NAME}
+  securityGroupSelectorTerms:
+    - tags:
+        kubernetes.io/cluster/${CLUSTER_NAME}: owned
+  ephemeralStorage:
+    size: "100Gi"

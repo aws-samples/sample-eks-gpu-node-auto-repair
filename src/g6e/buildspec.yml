@@ -1,0 +1,22 @@
+version: 0.2
+
+# Buildspec for building and pushing the training image via AWS CodeBuild.
+# Runs on a real linux/amd64 CodeBuild host (no local Docker / no emulation).
+# Expects environment variables: AWS_DEFAULT_REGION, ACCOUNT_ID, ECR_REPO, IMAGE_TAG.
+
+phases:
+  pre_build:
+    commands:
+      - ECR="${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+      - IMAGE="${ECR}/${ECR_REPO}:${IMAGE_TAG}"
+      - echo "Logging in to ECR ${ECR}"
+      - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR}"
+  build:
+    commands:
+      - echo "Building ${IMAGE}"
+      - docker build -t "${IMAGE}" .
+  post_build:
+    commands:
+      - echo "Pushing ${IMAGE}"
+      - docker push "${IMAGE}"
+      - echo "Pushed ${IMAGE}"

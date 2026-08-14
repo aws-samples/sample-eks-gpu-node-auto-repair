@@ -1,0 +1,85 @@
+apiVersion: eks.amazonaws.com/v1
+kind: NodeClass
+metadata:
+  name: efa-gpu
+spec:
+  role: ${NODE_ROLE}
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: ${CLUSTER_NAME}
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: ${CLUSTER_NAME}
+    # Also attach the EKS cluster primary SG so the control plane can reach kubelet (:10250)
+    # for logs/exec — the EFA SG alone does not permit control-plane->node ingress.
+    - id: ${CLUSTER_SG}
+  # Cluster-strategy placement group for low-latency EFA interconnect.
+  placementGroupSelector:
+    name: ${PLACEMENT_GROUP}
+  # Target the capacity reservation (ODCR or Capacity Block) by ID.
+  # Note: for EKS Auto Mode, 'id' is mutually exclusive with 'ownerID'/'tags' — the id alone
+  # uniquely identifies the reservation. (Cross-account reservations are selected via tags+ownerID.)
+  capacityReservationSelectorTerms:
+    - id: ${CR_ID}
+  advancedNetworking:
+    # Full p5en EFA layout: 16 network cards, 16 EFA interfaces (hardware max).
+    # Follows the AWS "Maximize network bandwidth" / P5 "Use case 1 (save IP addresses)" pattern
+    # scaled to p5en's 16 cards: primary ENA interface on card 0 (carries pod IPs via /28
+    # prefix), an efa-only on card 0/device 1, and efa-only on cards 1-15/device 0.
+    # Total = 16 efa-only interfaces (vpc.amazonaws.com/efa: 16), single private IP, full
+    # EFA interconnect bandwidth. There is no cost/perf penalty to declaring all 16.
+    networkInterfaces:
+      - deviceIndex: 0
+        interfaceType: interface
+        networkCardIndex: 0
+        secondaryIPv4PrefixCount: 1
+      - deviceIndex: 1
+        interfaceType: efa-only
+        networkCardIndex: 0
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 1
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 2
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 3
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 4
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 5
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 6
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 7
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 8
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 9
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 10
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 11
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 12
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 13
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 14
+      - deviceIndex: 0
+        interfaceType: efa-only
+        networkCardIndex: 15
+  ephemeralStorage:
+    size: "500Gi"

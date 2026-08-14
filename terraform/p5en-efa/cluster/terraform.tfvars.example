@@ -1,0 +1,12 @@
+region             = "us-east-1"
+availability_zone  = "us-east-1a"
+cluster_name       = "eks-gpu-efa"
+kubernetes_version = "1.36"
+vpc_cidr           = "10.42.0.0/16"
+enable_nat_gateway   = true
+enable_vpc_endpoints = true
+tags = {
+  Project   = "sample-eks-gpu-node-auto-repair-efa"
+  ManagedBy = "your-alias"
+  Ephemeral = "true"
+}

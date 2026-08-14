@@ -1,0 +1,40 @@
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: efa-gpu
+spec:
+  template:
+    metadata:
+      labels:
+        nodepool: efa-gpu
+    spec:
+      nodeClassRef:
+        group: eks.amazonaws.com
+        kind: NodeClass
+        name: efa-gpu
+      requirements:
+        - key: "eks.amazonaws.com/instance-family"
+          operator: In
+          values: ["p5en"]
+        - key: "topology.kubernetes.io/zone"
+          operator: In
+          values: ["${EFA_AZ}"]
+        - key: "karpenter.sh/capacity-type"
+          operator: In
+          values: ["reserved"]
+        - key: "kubernetes.io/arch"
+          operator: In
+          values: ["amd64"]
+      taints:
+        - key: nvidia.com/gpu
+          effect: NoSchedule
+  limits:
+    nvidia.com/gpu: "16"
+  disruption:
+    # During a JobSet gang-restart (failurePolicy restartStrategy: Recreate), all worker
+    # pods are briefly deleted at once, so a HEALTHY GPU node can momentarily go empty.
+    # A short consolidateAfter would consolidate that healthy node away mid-repair, forcing
+    # Karpenter to reprovision every node instead of just the faulted one. Keep this window
+    # comfortably longer than the gang-restart gap so only the faulted node is replaced.
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 15m
