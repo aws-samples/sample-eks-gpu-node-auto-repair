@@ -25,8 +25,9 @@ spec:
               nodeSelector:
                 nodegroup: gpu
               # Force one worker per node so a node failure loses exactly one rank —
-              # this is what makes the node auto-repair story meaningful. Without this,
-              # Karpenter may bin-pack both ranks onto one multi-GPU node.
+              # this is what makes the node auto-repair story meaningful. The managed
+              # node group supplies the nodes; this pod anti-affinity (not the scheduler's
+              # provisioning) is what keeps the two ranks on separate nodes.
               affinity:
                 podAntiAffinity:
                   requiredDuringSchedulingIgnoredDuringExecution:

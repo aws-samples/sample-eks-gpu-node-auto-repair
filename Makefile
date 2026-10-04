@@ -54,7 +54,7 @@ g6e-clean: ## (g6e) Destroy all resources
 # ---- mng-g6e path (single-GPU L40S, Managed Node Group, nodeRepairConfig overrides) ----
 .PHONY: mng-g6e-up mng-g6e-cluster mng-g6e-nodegroup mng-g6e-storage mng-g6e-image mng-g6e-train mng-g6e-demo mng-g6e-inject-fault mng-g6e-diagnose mng-g6e-precheck mng-g6e-clean
 
-mng-g6e-up: ## (mng-g6e) Stand up all infra: cluster -> storage -> image (image reused from g6e)
+mng-g6e-up: ## (mng-g6e) Stand up all infra: cluster -> nodegroup -> storage -> image (image reused from g6e)
 	@$(MAKE) mng-g6e-cluster
 	@$(MAKE) mng-g6e-nodegroup
 	@$(MAKE) mng-g6e-storage

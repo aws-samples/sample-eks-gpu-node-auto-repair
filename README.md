@@ -77,20 +77,34 @@ and the [node health documentation](https://docs.aws.amazon.com/eks/latest/userg
 > unaffected by the default change — the run-pacing behavior above is unchanged. The new default
 > only matters for NodePools that leave the field unset.
 
-## Two paths
+## Paths
 
-This repo ships two symmetric, self-contained paths. Pick based on the hardware you want to
-show:
+This repo ships four symmetric, self-contained paths across two families. Pick based on the
+hardware you want to show **and** the compute/repair model you want to demonstrate:
 
-| Path | Instances | Workload | Networking | Make prefix | Manifests / scripts |
-|---|---|---|---|---|---|
-| **g6e** (entry-level) | 1× GPU per node, `g6e` / NVIDIA L40S | LoRA fine-tune of Qwen2.5-1.5B, JobSet `Recreate` | standard VPC CNI | `make g6e-*` | `kubernetes/g6e`, `scripts/g6e`, `terraform/g6e`, `src/g6e` |
-| **p5en-efa** (large-scale) | 2× `p5en.48xlarge` (8× H200 each) | full-parameter FSDP fine-tune, JobSet `Recreate` | EFA / NCCL (16 EFA NICs) | `make p5en-efa-*` | `kubernetes/p5en-efa`, `scripts/p5en-efa`, `terraform/p5en-efa`, `src/p5en-efa` |
+| Path | Instances | Workload | Networking | Compute & repair | Make prefix | Manifests / scripts |
+|---|---|---|---|---|---|---|
+| **g6e** (entry-level) | 1× GPU per node, `g6e` / NVIDIA L40S | LoRA fine-tune of Qwen2.5-1.5B, JobSet `Recreate` | standard VPC CNI | EKS **Auto Mode**; node auto repair always-on, non-configurable, always `Replace` | `make g6e-*` | `kubernetes/g6e`, `scripts/g6e`, `terraform/g6e`, `src/g6e` |
+| **p5en-efa** (large-scale) | 2× `p5en.48xlarge` (8× H200 each) | full-parameter FSDP fine-tune, JobSet `Recreate` | EFA / NCCL (16 EFA NICs) | EKS **Auto Mode**; node auto repair always-on, non-configurable, always `Replace` | `make p5en-efa-*` | `kubernetes/p5en-efa`, `scripts/p5en-efa`, `terraform/p5en-efa`, `src/p5en-efa` |
+| **mng-g6e** | 1× GPU per node, `g6e` / NVIDIA L40S | same LoRA fine-tune of Qwen2.5-1.5B, JobSet `Recreate` | standard VPC CNI | EKS **Managed Node Group**; configurable node auto repair via `nodeRepairConfigOverrides` | `make mng-g6e-*` | `kubernetes/mng-g6e`, `scripts/mng-g6e`, `terraform/mng-g6e` (image reused from `g6e`) |
+| **mng-p5en-efa** | 2× `p5en.48xlarge` (8× H200 each) | full-parameter FSDP fine-tune, JobSet `Recreate` | EFA / NCCL (16 EFA NICs) | EKS **Managed Node Group**; configurable node auto repair via `nodeRepairConfigOverrides` | `make mng-p5en-efa-*` | `kubernetes/mng-p5en-efa`, `scripts/mng-p5en-efa`, `terraform/mng-p5en-efa` (image reused from `p5en-efa`) |
 
-Both paths use the same self-healing primitives (node monitoring agent → node condition →
-Karpenter Replace → JobSet gang-restart → checkpoint resume). The **g6e** path is the quickest,
-cheapest way to see the full chain; the **p5en-efa** path additionally proves EFA bandwidth and
-multi-node FSDP at scale.
+All four paths use the same self-healing primitives (node monitoring agent → node condition →
+repair → JobSet gang-restart → checkpoint resume) and reuse the same training images, JobSet
+manifests, FSx PVCs, and checkpoint logic — only the compute + repair layer differs. The two
+families differ in **how** repair is governed:
+
+- **g6e / p5en-efa** run on **EKS Auto Mode**: node auto repair is bundled, always-on, and
+  **non-configurable** — every `AcceleratedHardwareReady` fault results in a `Replace`, with
+  nothing to install.
+- **mng-g6e / mng-p5en-efa** run on **EKS Managed Node Groups** with the node monitoring agent
+  installed as an **add-on**, and demonstrate **configurable** per-fault repair via
+  `nodeRepairConfigOverrides` — tuning `repairAction` (`Replace` / `Reboot` / `NoAction`) and
+  `minRepairWaitTimeMins` per `nodeUnhealthyReason`. See
+  [Configurable node repair (MNG paths)](#configurable-node-repair-mng-paths).
+
+Within each family, the **g6e** path is the quickest, cheapest way to see the full chain; the
+**p5en-efa** path additionally proves EFA bandwidth and multi-node FSDP at scale.
 
 > Validated end-to-end on **Amazon EKS Auto Mode, Kubernetes 1.36**:
 > - **g6e** (`g6e.4xlarge` / L40S): fault injection → agent detection → node auto
@@ -101,7 +115,8 @@ multi-node FSDP at scale.
 > See [How it works](#how-it-works) for the chain of events and timings.
 
 The quickstart below uses the **g6e** path; substitute the `p5en-efa-` prefix for the
-large-scale path.
+large-scale path, or the `mng-g6e-` / `mng-p5en-efa-` prefixes for the Managed Node Group paths
+([MNG quickstarts](#quickstart-mng-paths)).
 
 ## Prerequisites
 
@@ -241,6 +256,89 @@ unchanged). `vpc.amazonaws.com/efa` requests are fine and do not trigger this. I
 you have a workload that genuinely needs hugepages *gated by the scheduler*, you must pin the
 NodePool to specific instance types and account for the limitation above.
 
+(This caveat is Auto-Mode/Karpenter-specific. The MNG paths provision through an EC2 Auto Scaling
+group + launch template, not Karpenter, so it does not apply to `mng-g6e` / `mng-p5en-efa`.)
+
+## Quickstart (MNG paths)
+
+The two **Managed Node Group** paths stand up a standard EKS cluster (not Auto Mode), install the
+node monitoring agent as an add-on, and enable configurable node auto repair with the
+[override matrix](#the-override-matrix). They reuse the training images built by their Auto Mode
+siblings (`g6e` / `p5en-efa`), so there is no separate image build to own — see
+[Shared-image teardown](#shared-image-teardown).
+
+### mng-g6e (single-GPU L40S, Managed Node Group)
+
+```bash
+# Prereqs: export your AWS context (both optional; region defaults to us-west-2).
+export AWS_REGION=us-west-2          # optional — where to deploy
+export AWS_PROFILE=<your-profile>    # optional — omit to use default credentials
+
+# --- Quickstart: stand up, run the self-heal demo, tear down ---
+make mng-g6e-up        # all infra: cluster + GPU MNG (repair overrides) + storage + image
+make mng-g6e-demo      # train -> inject XID 79 (Replace) + documented follow-on injects
+make mng-g6e-clean     # destroy the MNG cluster + storage (NOT the shared image; asks to confirm)
+
+# --- Or run the infra layers individually (same as mng-g6e-up, step by step) ---
+make mng-g6e-cluster   # standard EKS cluster + GPU MNG with nodeRepairConfig overrides
+make mng-g6e-nodegroup # wait for GPU MNG nodes + verify NMA add-on and device plugin
+make mng-g6e-storage   # FSx + CSI + Pod Identity + StorageClass/PVC
+make mng-g6e-image     # ensure the training image exists (reuses the g6e image build)
+make mng-g6e-precheck  # verify the stack is ready to train
+
+# --- Or drive the workload steps by hand (instead of mng-g6e-demo) ---
+make mng-g6e-train         # launch the LoRA fine-tune (JobSet)
+make mng-g6e-inject-fault  # inject a GPU fault (XID=79 default; set XID=63|64|95 to vary)
+make mng-g6e-diagnose      # pull a node log bundle, no SSH (kubectl ekslogs)
+```
+
+### mng-p5en-efa (multi-node H200 FSDP over EFA, Managed Node Group)
+
+Like the Auto Mode `p5en-efa` path, this provisions p5en.48xlarge from a capacity reservation, so
+it needs the same `CR_ID` + `EFA_AZ` environment.
+
+```bash
+# Prereqs: your AWS context + the capacity reservation to provision p5en from.
+export AWS_REGION=<your-region>                # required
+export AWS_PROFILE=<your-profile>              # optional — omit to use default credentials
+export CR_ID=<your-capacity-reservation-id>    # required — e.g. cr-0123456789abcdef0
+export EFA_AZ=<az-of-your-reservation>         # required — e.g. us-east-1a
+
+# --- Quickstart: stand up, run the self-heal demo, tear down ---
+make mng-p5en-efa-up       # all infra: cluster + EFA GPU MNG (repair overrides) + storage + image
+make mng-p5en-efa-demo     # NCCL -> FSDP -> inject XID 79 (Replace) + documented follow-on injects
+make mng-p5en-efa-clean    # destroy the MNG cluster + storage (NOT the shared image; asks to confirm)
+
+# --- Or run the infra layers individually (same as mng-p5en-efa-up, step by step) ---
+make mng-p5en-efa-cluster   # standard EKS cluster + EFA GPU MNG with nodeRepairConfig overrides
+make mng-p5en-efa-nodegroup # wait for the 2 EFA GPU MNG nodes + verify NMA add-on + device plugins
+make mng-p5en-efa-storage   # FSx for Lustre + CSI + Pod Identity + StorageClass/PVC
+make mng-p5en-efa-image     # ensure the DLC training image exists (reuses the p5en-efa image build)
+make mng-p5en-efa-precheck  # verify the stack is ready to train
+
+# --- Or drive the workload steps by hand (instead of mng-p5en-efa-demo) ---
+make mng-p5en-efa-nccl-test    # NCCL all-reduce over EFA (busbw proof)
+make mng-p5en-efa-train        # launch the FSDP fine-tune (JobSet)
+make mng-p5en-efa-inject-fault # inject a GPU fault (XID=79 default; set XID=63|64|95 to vary)
+make mng-p5en-efa-diagnose     # pull a node log bundle, no SSH (kubectl ekslogs)
+```
+
+### Shared-image teardown
+
+Each MNG path **reuses the training image built by its Auto Mode sibling** — `mng-g6e` consumes
+the image the `g6e` path builds, and `mng-p5en-efa` consumes the `p5en-efa` image (the container
+is identical regardless of the node-provisioning model). The image layer therefore has a single
+owner:
+
+- `make mng-g6e-clean` / `make mng-p5en-efa-clean` destroy the MNG cluster + storage **but NOT the
+  shared training image** (that layer — the ECR repo, S3 build-context bucket, CodeBuild project,
+  and IAM — is owned by the `g6e` / `p5en-efa` paths).
+- `make g6e-clean` / `make p5en-efa-clean` remove the shared image layer. If you tear down both an
+  Auto Mode path and its MNG sibling, run the MNG `*-clean` first and the owning path's `*-clean`
+  last.
+
+`make help` lists every target for all four paths and is the source of truth.
+
 ## Architecture
 
 ### Components
@@ -307,6 +405,70 @@ The large-scale path demonstrates the same self-healing chain at multi-node scal
 See the [hugepages known issue](#known-issue-hugepages-requests-can-block-karpenter-node-provisioning)
 above for a Karpenter provisioning caveat that applies to EFA workloads on any capacity type.
 
+## Configurable node repair (MNG paths)
+
+The Auto Mode paths (`g6e`, `p5en-efa`) show node auto repair at its simplest: there is nothing
+to install, repair is always-on and **non-configurable**, and every `AcceleratedHardwareReady`
+fault results in a `Replace`. The Managed Node Group paths (`mng-g6e`, `mng-p5en-efa`) show the
+other end of the spectrum — repair you opt into and tune per fault.
+
+### Auto Mode vs. MNG
+
+| | **Auto Mode** (`g6e` / `p5en-efa`) | **Managed Node Group** (`mng-g6e` / `mng-p5en-efa`) |
+|---|---|---|
+| Node monitoring agent | systemd service baked into the AMI (nothing to install) | installed as an **add-on** (DaemonSet) |
+| Node auto repair | always-on, bundled | opt in via `nodeRepairConfig.enabled = true` on the MNG |
+| Configurability | none | tune `repairAction` + `minRepairWaitTimeMins` per `nodeUnhealthyReason` via `nodeRepairConfigOverrides` |
+| Repair actions | `Replace` only | `Replace`, `Reboot`, `NoAction` |
+
+On MNG you enable `nodeRepairConfig` on the node group and attach a list of
+`nodeRepairConfigOverrides`, each keyed by a `nodeUnhealthyReason`, that override the built-in
+default `repairAction` and `minRepairWaitTimeMins` for that reason.
+
+### The override matrix
+
+The MNG default for `AcceleratedHardwareReady` faults is **`Reboot` after 10 minutes**. This
+sample ships three deliberate overrides plus one un-overridden reason (so the default `Reboot`
+remains visible side by side):
+
+| Injected XID | Reason code | MNG default | Override | Why |
+|---|---|---|---|---|
+| 79 (fell off bus) | NvidiaXID79Error | Reboot @10m | **Replace @5m** | Bus-level loss; a reboot cannot recover it — only a bare-metal replacement can. |
+| 48 / 64 (double-bit ECC / remap failure) | NvidiaXID64Error | Reboot @10m | **Replace @10m** | Documented tradeoff (see below). |
+| 63 (memory remapping event) | NvidiaXID63Error | Reboot @10m | **NoAction** | Informational wear event; ride it out instead of churning the node. |
+| 95 (uncontained memory error) | NvidiaXID95Error | Reboot @10m | *(not overridden)* | Left at the default so the demo shows a real `Reboot` (same instance ID). |
+
+### The 48/64 tradeoff — documented honestly
+
+Overriding 48/64 to `Replace` is a judgment call, **not** a universal truth — `Reboot` is the
+right answer for many fleets:
+
+- **Reboot wins** when you want the fastest recovery and want to keep the instance (a warm local
+  NVMe scratch disk, the same reserved ODCR slot, the same IP) and the fault may be a transient GPU
+  wedge that a reset clears.
+- **Replace wins** for long, checkpointed distributed training: a gang-restart already discards the
+  rank and resumes from a checkpoint, so reboot's instance-preservation advantage is moot, while
+  degrading silicon is likely to re-fail mid-run — fresh hardware is cheap insurance **when you
+  have spare known-good capacity**.
+- **Caveat:** on a tightly-sized ODCR, `Replace` needs the terminated node's reservation slot to
+  free before a replacement can launch; `Reboot` keeps the slot. The right choice is
+  capacity-posture dependent.
+
+### Detect → repair → diagnose still holds
+
+On MNG the node monitoring agent runs as an **add-on DaemonSet** (versus the Auto Mode systemd
+agent baked into the AMI), relying on the add-on's default tolerations to stay scheduled on the
+GPU node group. The detection source is the same (`dcgmi --inject` → NMA →
+`AcceleratedHardwareReady=False` / `NvidiaXID<N>Error`), and the **diagnose** third of the story
+is unchanged: `make mng-g6e-diagnose` / `make mng-p5en-efa-diagnose` pull a full node log bundle
+via the `NodeDiagnostic` API (`kubectl ekslogs`) — the add-on ships the CRD controller, so this
+works even though MNG nodes also allow SSH/SSM.
+
+For the `Reboot` and `NoAction` behaviors specifically: a `Reboot` keeps the same instance ID (the
+node goes NotReady, reboots, rejoins, and the gang-restart re-lands the rank on the same
+instance); a `NoAction` flips the condition to `False` but fires no repair and leaves the node
+`Ready`.
+
 ## Repository layout
 
 ```
@@ -320,10 +482,17 @@ kubernetes/g6e/fsx               StorageClass + RWX PVC (g6e)
 kubernetes/g6e/train             JobSet (headless service auto-created by the JobSet controller)
 kubernetes/g6e/fault-injection   dcgmi --inject Job
 kubernetes/p5en-efa/…            nodepool (EFA NodeClass), fsx, train (FSDP), nccl-benchmark
+terraform/mng-g6e/cluster        standard EKS cluster + VPC + GPU MNG (nodeRepairConfig overrides) + add-ons
+terraform/mng-g6e/storage        FSx security group + subnet lookups (mng-g6e; image reused from g6e)
+terraform/mng-p5en-efa/…         the same cluster + storage layers for the EFA MNG path (image reused from p5en-efa)
+kubernetes/mng-g6e/…             fsx, train (MNG label selector), fault-injection (XID-parameterized)
+kubernetes/mng-p5en-efa/…        fsx, train (FSDP), nccl-benchmark, fault-injection (XID-parameterized)
 src/g6e                          train.py, checkpoint.py, buildspec.yml, Dockerfile, tests (g6e)
 src/p5en-efa                     train_fsdp.py, checkpoint_dcp.py, nccl_allreduce.py, Dockerfile (p5en/EFA)
 scripts/g6e                      g6e orchestration (wrapped by the Makefile), incl. diagnose.sh
 scripts/p5en-efa                 p5en/EFA orchestration, incl. diagnose.sh
+scripts/mng-g6e                  mng-g6e orchestration (incl. XID-parameterized inject-fault.sh, diagnose.sh)
+scripts/mng-p5en-efa             mng-p5en-efa orchestration (incl. inject-fault.sh, nccl-test, diagnose.sh)
 ```
 
 ## Notes
