@@ -51,6 +51,45 @@ g6e-precheck: ## (g6e) Validate prerequisites before running
 g6e-clean: ## (g6e) Destroy all resources
 	@scripts/g6e/clean.sh
 
+# ---- mng-g6e path (single-GPU L40S, Managed Node Group, nodeRepairConfig overrides) ----
+.PHONY: mng-g6e-up mng-g6e-cluster mng-g6e-nodegroup mng-g6e-storage mng-g6e-image mng-g6e-train mng-g6e-demo mng-g6e-inject-fault mng-g6e-diagnose mng-g6e-precheck mng-g6e-clean
+
+mng-g6e-up: ## (mng-g6e) Stand up all infra: cluster -> storage -> image (image reused from g6e)
+	@$(MAKE) mng-g6e-cluster
+	@$(MAKE) mng-g6e-nodegroup
+	@$(MAKE) mng-g6e-storage
+	@$(MAKE) mng-g6e-image
+
+mng-g6e-cluster: ## (mng-g6e) Provision the standard EKS cluster + GPU MNG with repair overrides
+	@scripts/mng-g6e/cluster-up.sh
+
+mng-g6e-nodegroup: ## (mng-g6e) Wait for GPU MNG nodes + verify NMA add-on and device plugin
+	@scripts/mng-g6e/nodegroup-ready.sh
+
+mng-g6e-storage: ## (mng-g6e) Provision FSx + CSI + Pod Identity + StorageClass/PVC
+	@scripts/mng-g6e/storage-up.sh
+
+mng-g6e-image: ## (mng-g6e) Ensure the training image exists (reuses the g6e image build)
+	@scripts/mng-g6e/image-build.sh
+
+mng-g6e-train: ## (mng-g6e) Install JobSet + launch the LoRA fine-tune
+	@scripts/mng-g6e/train.sh
+
+mng-g6e-demo: ## (mng-g6e) Train -> inject XID 79 (Replace) + documented follow-on injects
+	@scripts/mng-g6e/demo.sh
+
+mng-g6e-inject-fault: ## (mng-g6e) Inject a GPU fault (XID=79 default; set XID=63|64|95 to vary)
+	@scripts/mng-g6e/inject-fault.sh
+
+mng-g6e-diagnose: ## (mng-g6e) Collect a node log bundle with no SSH (kubectl ekslogs)
+	@scripts/mng-g6e/diagnose.sh
+
+mng-g6e-precheck: ## (mng-g6e) Validate prerequisites before running
+	@scripts/mng-g6e/precheck.sh
+
+mng-g6e-clean: ## (mng-g6e) Destroy the mng-g6e cluster + storage (NOT the shared g6e image)
+	@scripts/mng-g6e/clean.sh
+
 # ---- p5en/EFA path (multi-node H200 FSDP over EFA) ----
 
 p5en-efa-up: ## (p5en/EFA) Stand up all infra: cluster -> nodepool -> storage -> image (stops before train)
