@@ -268,6 +268,12 @@ continuously and writes NodeConditions to drive repair; diagnosis runs on demand
 detailed artifacts for humans. You can diagnose a node that auto-repair has flagged but not yet
 terminated.
 
+> **Detection is broader than NMA node conditions.** As of June 2026, EKS Auto Mode's compute
+> controller also polls EC2 `DescribeInstanceStatus` and automatically replaces nodes on scheduled
+> maintenance events and instance/system status-check failures — detection that does not depend on
+> the node monitoring agent. The GPU-fault path this sample injects (`dcgmi --inject` → NMA →
+> `AcceleratedHardwareReady=False`) is one detection source among several the data plane watches.
+
 ### Storage & checkpoint contract
 
 The g6e trainer (HuggingFace Trainer + PEFT LoRA) writes a checkpoint to
