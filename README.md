@@ -260,6 +260,11 @@ NodePool to specific instance types and account for the limitation above.
 - **Fault injection** — `dcgmi test --inject` of a well-known XID, which flips the node condition
   through the agent's real DCGM path.
 
+> **Node monitoring agent currency:** The EKS node monitoring agent is at **v1.7.2** (Sep 2026),
+> which adds NVIDIA/DCGM monitoring on **arm64 GPU nodes** (e.g. Grace-based GPU instances), block
+> device I/O error detection, and an external DCGM hostengine option. On EKS Auto Mode the agent is
+> part of the managed node image and is kept current for you; no action is required.
+
 ### Detection vs. diagnosis
 
 **Detection and diagnosis are separate concerns** (per the EKS service team): detection runs
