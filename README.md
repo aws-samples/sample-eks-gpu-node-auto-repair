@@ -70,6 +70,13 @@ and the [node health documentation](https://docs.aws.amazon.com/eks/latest/userg
 > repair Replace action triggers, and you won't see the repair/resume half in the same run.
 > Inject the fault early in the run to leave plenty of runway afterward.
 
+> **EKS 1.37 consolidation default:** Starting with EKS 1.37, newly created EKS Auto Mode
+> NodePools that omit `consolidationPolicy` default to `Balanced` (approve a disruption when the
+> hourly saving outweighs the Pod-disruption cost) instead of `WhenEmptyOrUnderutilized`. The GPU
+> NodePools in this sample set `consolidationPolicy` **explicitly** (`WhenEmpty`), so they are
+> unaffected by the default change — the run-pacing behavior above is unchanged. The new default
+> only matters for NodePools that leave the field unset.
+
 ## Two paths
 
 This repo ships two symmetric, self-contained paths. Pick based on the hardware you want to
