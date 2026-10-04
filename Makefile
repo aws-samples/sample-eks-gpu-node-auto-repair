@@ -90,6 +90,48 @@ mng-g6e-precheck: ## (mng-g6e) Validate prerequisites before running
 mng-g6e-clean: ## (mng-g6e) Destroy the mng-g6e cluster + storage (NOT the shared g6e image)
 	@scripts/mng-g6e/clean.sh
 
+# ---- mng-p5en-efa path (multi-node H200 FSDP over EFA, Managed Node Group, repair overrides) ----
+.PHONY: mng-p5en-efa-up mng-p5en-efa-cluster mng-p5en-efa-nodegroup mng-p5en-efa-storage mng-p5en-efa-image mng-p5en-efa-nccl-test mng-p5en-efa-train mng-p5en-efa-demo mng-p5en-efa-inject-fault mng-p5en-efa-diagnose mng-p5en-efa-precheck mng-p5en-efa-clean
+
+mng-p5en-efa-up: ## (mng-p5en-efa) Stand up all infra: cluster -> nodegroup -> storage -> image (image reused from p5en-efa)
+	@$(MAKE) mng-p5en-efa-cluster
+	@$(MAKE) mng-p5en-efa-nodegroup
+	@$(MAKE) mng-p5en-efa-storage
+	@$(MAKE) mng-p5en-efa-image
+
+mng-p5en-efa-cluster: ## (mng-p5en-efa) Provision the standard EKS cluster + EFA GPU MNG with repair overrides
+	@scripts/mng-p5en-efa/cluster-up.sh
+
+mng-p5en-efa-nodegroup: ## (mng-p5en-efa) Wait for the 2 EFA GPU MNG nodes + verify NMA add-on and device plugins
+	@scripts/mng-p5en-efa/nodegroup-ready.sh
+
+mng-p5en-efa-storage: ## (mng-p5en-efa) Provision FSx for Lustre + CSI + Pod Identity + StorageClass/PVC
+	@scripts/mng-p5en-efa/storage-up.sh
+
+mng-p5en-efa-image: ## (mng-p5en-efa) Ensure the DLC training image exists (reuses the p5en-efa image build)
+	@scripts/mng-p5en-efa/image-build.sh
+
+mng-p5en-efa-nccl-test: ## (mng-p5en-efa) Run NCCL all_reduce across 2 nodes (EFA busbw proof)
+	@scripts/mng-p5en-efa/nccl-test.sh
+
+mng-p5en-efa-train: ## (mng-p5en-efa) Install JobSet + launch the FSDP training JobSet
+	@scripts/mng-p5en-efa/train.sh
+
+mng-p5en-efa-demo: ## (mng-p5en-efa) NCCL -> FSDP -> inject XID 79 (Replace) + documented follow-on injects
+	@scripts/mng-p5en-efa/demo.sh
+
+mng-p5en-efa-inject-fault: ## (mng-p5en-efa) Inject a GPU fault (XID=79 default; set XID=63|64|95 to vary)
+	@scripts/mng-p5en-efa/inject-fault.sh
+
+mng-p5en-efa-diagnose: ## (mng-p5en-efa) Collect a node log bundle with no SSH (kubectl ekslogs)
+	@scripts/mng-p5en-efa/diagnose.sh
+
+mng-p5en-efa-precheck: ## (mng-p5en-efa) Validate prerequisites before running
+	@scripts/mng-p5en-efa/precheck.sh
+
+mng-p5en-efa-clean: ## (mng-p5en-efa) Destroy the mng-p5en-efa cluster + storage (NOT the shared image, NOT the reservation)
+	@scripts/mng-p5en-efa/clean.sh
+
 # ---- p5en/EFA path (multi-node H200 FSDP over EFA) ----
 
 p5en-efa-up: ## (p5en/EFA) Stand up all infra: cluster -> nodepool -> storage -> image (stops before train)
