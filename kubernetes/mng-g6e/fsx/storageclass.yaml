@@ -1,0 +1,17 @@
+# Placeholders ${FSX_SUBNET_ID} and ${FSX_SG_ID} are substituted by storage-up.sh.
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: fsx-sc
+provisioner: fsx.csi.aws.com
+parameters:
+  subnetId: ${FSX_SUBNET_ID}
+  securityGroupIds: ${FSX_SG_ID}
+  deploymentType: PERSISTENT_2
+  perUnitStorageThroughput: "250"
+  # Auto Mode's newer kernel requires Lustre filesystem version >= 2.15.
+  fileSystemTypeVersion: "2.15"
+mountOptions:
+  - flock
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
