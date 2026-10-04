@@ -70,6 +70,13 @@ and the [node health documentation](https://docs.aws.amazon.com/eks/latest/userg
 > repair Replace action triggers, and you won't see the repair/resume half in the same run.
 > Inject the fault early in the run to leave plenty of runway afterward.
 
+> **EKS 1.37 consolidation default:** Starting with EKS 1.37, newly created EKS Auto Mode
+> NodePools that omit `consolidationPolicy` default to `Balanced` (approve a disruption when the
+> hourly saving outweighs the Pod-disruption cost) instead of `WhenEmptyOrUnderutilized`. The GPU
+> NodePools in this sample set `consolidationPolicy` **explicitly** (`WhenEmpty`), so they are
+> unaffected by the default change — the run-pacing behavior above is unchanged. The new default
+> only matters for NodePools that leave the field unset.
+
 ## Two paths
 
 This repo ships two symmetric, self-contained paths. Pick based on the hardware you want to
@@ -253,6 +260,11 @@ NodePool to specific instance types and account for the limitation above.
 - **Fault injection** — `dcgmi test --inject` of a well-known XID, which flips the node condition
   through the agent's real DCGM path.
 
+> **Node monitoring agent currency:** The EKS node monitoring agent is at **v1.7.2** (Sep 2026),
+> which adds NVIDIA/DCGM monitoring on **arm64 GPU nodes** (e.g. Grace-based GPU instances), block
+> device I/O error detection, and an external DCGM hostengine option. On EKS Auto Mode the agent is
+> part of the managed node image and is kept current for you; no action is required.
+
 ### Detection vs. diagnosis
 
 **Detection and diagnosis are separate concerns** (per the EKS service team): detection runs
@@ -260,6 +272,12 @@ continuously and writes NodeConditions to drive repair; diagnosis runs on demand
 `NodeDiagnostic` API — see [Diagnostics without SSH](#diagnostics-without-ssh)) and collects
 detailed artifacts for humans. You can diagnose a node that auto-repair has flagged but not yet
 terminated.
+
+> **Detection is broader than NMA node conditions.** As of June 2026, EKS Auto Mode's compute
+> controller also polls EC2 `DescribeInstanceStatus` and automatically replaces nodes on scheduled
+> maintenance events and instance/system status-check failures — detection that does not depend on
+> the node monitoring agent. The GPU-fault path this sample injects (`dcgmi --inject` → NMA →
+> `AcceleratedHardwareReady=False`) is one detection source among several the data plane watches.
 
 ### Storage & checkpoint contract
 
