@@ -474,6 +474,34 @@ node goes NotReady, reboots, rejoins, and the gang-restart re-lands the rank on 
 instance); a `NoAction` flips the condition to `False` but fires no repair and leaves the node
 `Ready`.
 
+### GPU health monitoring requires the dcgm-server toleration
+
+The node monitoring agent reads GPU health from an `nv-hostengine` provided by the add-on's bundled
+`dcgm-server` DaemonSet. That DaemonSet does **not** tolerate custom taints by default, so on these
+paths — whose only GPU nodes carry `nvidia.com/gpu=NoSchedule` — it would never schedule, and the
+agent would report `AcceleratedHardwareReady=False` with reason `DCGMError` instead of real GPU
+health. Both cluster layers therefore pass a toleration to the agent add-on via
+`configuration_values` (`dcgmAgent.tolerations`); without it, GPU fault detection silently does not
+work. This is specific to tainted-GPU-only MNG clusters; EKS Auto Mode handles it internally.
+
+### Observed live run (EKS 1.37, g6e MNG)
+
+All four behaviors validated end-to-end on a live `mng-g6e` cluster (Kubernetes 1.37, node
+monitoring agent v1.7.2). Each fault was injected with `dcgmi test --inject -f 230 -v <XID>` against
+the `dcgm-server` host engine the agent reads:
+
+| Injected XID | Condition reason | Override | Observed result |
+|---|---|---|---|
+| 63 | `NvidiaXID63Error` | NoAction | Node stayed `Ready`, **same instance**, no repair |
+| 79 | `NvidiaXID79Error` | Replace @10m | Node cordoned → drained → instance **terminated and replaced** (new instance) |
+| 95 | `NvidiaXID95Error` | *(default)* Reboot | Node rebooted — **same instance** (new boot ID), condition recovered |
+| 64 | `NvidiaXID64Error` | Replace @30m | After the 30-min wait, instance **terminated and replaced** |
+
+> **Reproducing the injection:** keep the injected field resident (re-inject periodically) through
+> the repair wait — a single injection decays and the condition reason oscillates between
+> `NvidiaXID<N>Error` and a generic `DCGMHealthCode<N>`, which can prevent the override from
+> matching. Inject against the node's `dcgm-server` pod (the hostengine the agent actually reads).
+
 ## Repository layout
 
 ```
