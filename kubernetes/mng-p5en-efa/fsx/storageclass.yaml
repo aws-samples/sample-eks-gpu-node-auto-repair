@@ -1,0 +1,17 @@
+# ${FSX_SUBNET_ID} and ${FSX_SG_ID} substituted by storage-up.sh.
+kind: StorageClass
+apiVersion: storage.k8s.io/v1
+metadata:
+  name: fsx-efa-sc
+provisioner: fsx.csi.aws.com
+parameters:
+  subnetId: ${FSX_SUBNET_ID}
+  securityGroupIds: ${FSX_SG_ID}
+  deploymentType: PERSISTENT_2
+  # Higher throughput for 16-rank parallel DCP checkpoint writes of a 32B model.
+  perUnitStorageThroughput: "1000"
+  fileSystemTypeVersion: "2.15"
+mountOptions:
+  - flock
+reclaimPolicy: Delete
+volumeBindingMode: Immediate

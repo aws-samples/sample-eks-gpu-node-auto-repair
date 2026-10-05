@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fsx-checkpoints
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: fsx-sc
+  resources:
+    requests:
+      # PERSISTENT_2 minimum is 1200Gi.
+      storage: 1200Gi
