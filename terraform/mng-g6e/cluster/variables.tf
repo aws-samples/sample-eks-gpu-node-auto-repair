@@ -17,9 +17,14 @@ variable "kubernetes_version" {
 }
 
 variable "gpu_instance_types" {
-  description = "GPU instance types for the managed node group."
+  description = <<-EOT
+    GPU instance types for the managed node group. All listed sizes carry a single NVIDIA L40S
+    GPU (one GPU per node), so the node group stays "1 GPU per node" regardless of which the ASG
+    launches. Listing several sizes gives the ASG multiple capacity pools per AZ, which makes
+    node provisioning resilient to InsufficientInstanceCapacity on any one size.
+  EOT
   type        = list(string)
-  default     = ["g6e.4xlarge"]
+  default     = ["g6e.4xlarge", "g6e.8xlarge", "g6e.12xlarge", "g6e.16xlarge"]
 }
 
 variable "gpu_desired_size" {

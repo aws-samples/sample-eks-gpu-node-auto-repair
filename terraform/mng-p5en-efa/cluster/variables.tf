@@ -33,14 +33,17 @@ variable "capacity_reservation_id" {
 
 variable "capacity_type" {
   description = <<-EOT
-    EKS managed node group capacity type for the reservation. Use "ON_DEMAND" for a plain
-    ODCR (the node group targets the reservation on-demand) or "CAPACITY_BLOCK" when the
-    reservation is a Capacity Block. DO NOT GUESS: confirm against
-    `aws ec2 describe-capacity-reservations --capacity-reservation-ids $CR_ID` at deploy time
-    (ReservationType capacity-block => "CAPACITY_BLOCK") and set this without editing HCL.
+    EKS managed node group capacity type for the reservation. Use "CAPACITY_BLOCK" when the
+    reservation is a Capacity Block (the common case for p5en ML capacity — the
+    `createdBy: EC2 CBR Management Service` tag on describe-capacity-reservations marks one), or
+    "ON_DEMAND" for a plain ODCR (the node group targets the reservation on-demand). With
+    CAPACITY_BLOCK the node group also sets the capacity-block market option automatically; an
+    ON_DEMAND launch against a Capacity Block is silently ignored and ICEs. Confirm with
+    `aws ec2 describe-capacity-reservations --capacity-reservation-ids $CR_ID` and set without
+    editing HCL.
   EOT
   type        = string
-  default     = "ON_DEMAND"
+  default     = "CAPACITY_BLOCK"
 }
 
 variable "enable_nat_gateway" {
