@@ -303,6 +303,10 @@ export AWS_REGION=<your-region>                # required
 export AWS_PROFILE=<your-profile>              # optional — omit to use default credentials
 export CR_ID=<your-capacity-reservation-id>    # required — e.g. cr-0123456789abcdef0
 export EFA_AZ=<az-of-your-reservation>         # required — e.g. us-east-1a
+# CAPACITY_TYPE defaults to CAPACITY_BLOCK (common for p5en ML capacity). If your reservation is a
+# plain ODCR, set CAPACITY_TYPE=ON_DEMAND. Confirm with
+# `aws ec2 describe-capacity-reservations --capacity-reservation-ids $CR_ID`.
+export CAPACITY_TYPE=CAPACITY_BLOCK            # or ON_DEMAND for a plain ODCR
 
 # --- Quickstart: stand up, run the self-heal demo, tear down ---
 make mng-p5en-efa-up       # all infra: cluster + EFA GPU MNG (repair overrides) + storage + image
@@ -518,8 +522,8 @@ kubernetes/p5en-efa/…            nodepool (EFA NodeClass), fsx, train (FSDP), 
 terraform/mng-g6e/cluster        standard EKS cluster + VPC + GPU MNG (nodeRepairConfig overrides) + add-ons
 terraform/mng-g6e/storage        FSx security group + subnet lookups (mng-g6e; image reused from g6e)
 terraform/mng-p5en-efa/…         the same cluster + storage layers for the EFA MNG path (image reused from p5en-efa)
-kubernetes/mng-g6e/…             fsx, train (MNG label selector), fault-injection (XID-parameterized)
-kubernetes/mng-p5en-efa/…        fsx, train (FSDP), nccl-benchmark, fault-injection (XID-parameterized)
+kubernetes/mng-g6e/…             fsx, train (MNG label selector) — fault injection is script-driven (scripts/mng-g6e/inject-fault.sh)
+kubernetes/mng-p5en-efa/…        fsx, train (FSDP), nccl-benchmark — fault injection is script-driven (scripts/mng-p5en-efa/inject-fault.sh)
 src/g6e                          train.py, checkpoint.py, buildspec.yml, Dockerfile, tests (g6e)
 src/p5en-efa                     train_fsdp.py, checkpoint_dcp.py, nccl_allreduce.py, Dockerfile (p5en/EFA)
 scripts/g6e                      g6e orchestration (wrapped by the Makefile), incl. diagnose.sh

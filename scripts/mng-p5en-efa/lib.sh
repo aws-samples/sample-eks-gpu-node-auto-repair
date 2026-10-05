@@ -29,6 +29,13 @@ export EFA_AZ="${EFA_AZ:-}"
 export EFA_CR_ID="${CR_ID:-}"
 export EFA_CR_OWNER="${CR_OWNER:-}"
 export EFA_RESERVATION_TYPE="${RESERVATION_TYPE:-odcr}"
+# Capacity type for the managed node group. Defaults to CAPACITY_BLOCK because p5en.48xlarge ML
+# capacity is commonly a Capacity Block (describe-capacity-reservations shows the tag
+# createdBy="EC2 CBR Management Service"). A Capacity Block launch REQUIRES this (the node group
+# then also sets the capacity-block market option); an ON_DEMAND launch against a Capacity Block
+# is silently ignored and ICEs on general on-demand capacity. Set CAPACITY_TYPE=ON_DEMAND if your
+# reservation is a plain ODCR.
+export EFA_CAPACITY_TYPE="${CAPACITY_TYPE:-CAPACITY_BLOCK}"
 # NAT gateway needs 1 Elastic IP. Default true (general egress + third-party registries like
 # nvcr.io/docker.io). VPC endpoints (AWS-service traffic on the backbone) are independent and
 # also default true for the enterprise best-practice combo. Set ENABLE_NAT=false for an

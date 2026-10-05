@@ -24,7 +24,7 @@ terraform -chdir="${TF_DIR}" apply -auto-approve -input=false \
   -var "region=${EFA_AWS_REGION}" -var "cluster_name=${EFA_CLUSTER_NAME}" \
   -var "availability_zone=${EFA_AZ}" \
   -var "capacity_reservation_id=${EFA_CR_ID}" \
-  -var "capacity_type=${CAPACITY_TYPE:-ON_DEMAND}" \
+  -var "capacity_type=${EFA_CAPACITY_TYPE}" \
   -var "enable_nat_gateway=${EFA_ENABLE_NAT}" \
   -var "enable_vpc_endpoints=${EFA_ENABLE_VPCE}"
 

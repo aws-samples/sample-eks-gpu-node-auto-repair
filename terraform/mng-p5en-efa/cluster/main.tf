@@ -118,7 +118,7 @@ module "eks" {
       }
 
       # Node auto repair with per-XID overrides. The monitoring condition and repair action
-      # use the EKS API enums (not the eksctl aliases) — confirmed live (plan Task 14).
+      # use the EKS API enums (not the eksctl aliases)
       node_repair_config = {
         enabled = true
         node_repair_config_overrides = [

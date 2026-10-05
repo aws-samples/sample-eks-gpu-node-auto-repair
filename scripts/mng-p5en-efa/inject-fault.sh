@@ -1,28 +1,36 @@
 #!/usr/bin/env bash
-# Inject a well-known XID via dcgmi on the node running rank-0 of the FSDP JobSet (or the
-# first EFA GPU node). XID is parameterized so the demo can sweep 79 / 64 / 63 / 95 to
-# exercise each managed-node-group nodeRepairConfigOverride.
+# Inject a well-known XID so the node monitoring agent sets AcceleratedHardwareReady=False and
+# node auto repair applies the configured override. XID is parameterized to exercise each rule
+# (79 / 64 / 63 / 95).
+#
+# The agent reads GPU health from the nv-hostengine run by the add-on's `dcgm-server` DaemonSet,
+# so we inject into THAT hostengine by exec'ing dcgmi inside the dcgm-server pod on the target
+# node (validated method). Injecting from a separate DCGM container or the host does NOT work:
+# the agent only reads its own dcgm-server hostengine, and the host has no dcgmi.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-require kubectl jq envsubst
+require kubectl
 
 XID="${XID:-79}"
-export XID
 
-# `|| true` so the rank-0 lookup cannot abort the script under `set -e`: if the FSDP JobSet
-# isn't running yet we fall back to the first efa-gpu node below.
+# Target the node running rank-0 of the FSDP JobSet, else the first EFA GPU node.
 TARGET_NODE="$(kubectl get pod -l jobset.sigs.k8s.io/jobset-name=fsdp-train \
   -o jsonpath='{.items[0].spec.nodeName}' 2>/dev/null || true)"
 [ -n "${TARGET_NODE}" ] || TARGET_NODE="$(kubectl get nodes -l nodegroup=efa-gpu \
-  -o jsonpath='{.items[0].metadata.name}')"
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
 [ -n "${TARGET_NODE}" ] || die "no EFA GPU node found"
-export TARGET_NODE
 
-log "Injecting XID ${XID} on node ${TARGET_NODE} via dcgmi --inject"
-kubectl delete job dcgm-inject --ignore-not-found >/dev/null 2>&1 || true
-envsubst '${TARGET_NODE} ${XID}' \
-  < "${REPO_ROOT}/kubernetes/mng-p5en-efa/fault-injection/dcgm-inject-job.yaml" | kubectl apply -f -
+# Find the dcgm-server pod on that node (the hostengine the agent reads).
+DCGM_POD="$(kubectl get pods -n kube-system -l k8s-app=dcgm-server \
+  -o jsonpath="{range .items[?(@.spec.nodeName==\"${TARGET_NODE}\")]}{.metadata.name}{end}" 2>/dev/null || true)"
+[ -n "${DCGM_POD}" ] || die "no dcgm-server pod on ${TARGET_NODE} — is the node monitoring agent add-on healthy? (dcgm-server must tolerate the GPU taint; see the cluster add-on configuration_values)"
 
-log "Applied. The NMA add-on sets AcceleratedHardwareReady=False / NvidiaXID${XID}Error within seconds."
+log "Injecting XID ${XID} on ${TARGET_NODE} via dcgmi in dcgm-server pod ${DCGM_POD}"
+# Field 230 = DCGM_FI_DEV_XID_ERRORS.
+kubectl exec -n kube-system "${DCGM_POD}" -- \
+  /usr/bin/dcgmi test --inject --gpuid 0 -f 230 -v "${XID}" || \
+  die "injection failed (is the GPU present and dcgm-server running nv-hostengine?)"
+
+log "Injected. The agent sets AcceleratedHardwareReady=False / NvidiaXID${XID}Error shortly."
 case "${XID}" in
   79) log "Expected repair: REPLACE after ~10 min (override). New instance ID." ;;
   64|48) log "Expected repair: REPLACE after ~30 min (override). New instance ID." ;;
@@ -30,4 +38,9 @@ case "${XID}" in
   95) log "Expected repair: default REBOOT after ~10 min (no override). SAME instance ID." ;;
   *) log "No override for XID ${XID}; default AcceleratedHardwareReady action (Reboot @10m) applies." ;;
 esac
-log "Watch: kubectl get nodes,pods -w   and   kubectl describe node ${TARGET_NODE} | grep -A3 AcceleratedHardwareReady"
+cat <<NOTE
+NOTE: an injected value decays and the condition reason can oscillate between NvidiaXID${XID}Error
+and a generic DCGMHealthCode. To hold it resident through the repair wait, re-inject periodically:
+  while true; do kubectl exec -n kube-system ${DCGM_POD} -- /usr/bin/dcgmi test --inject --gpuid 0 -f 230 -v ${XID}; sleep 90; done
+Watch: kubectl get nodes -w   and   kubectl describe node ${TARGET_NODE} | grep -A3 AcceleratedHardwareReady
+NOTE

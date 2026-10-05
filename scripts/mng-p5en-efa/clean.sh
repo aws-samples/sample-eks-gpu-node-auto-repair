@@ -64,14 +64,14 @@ log "Destroying the mng-p5en-efa cluster Terraform layer (VPC, cluster, EFA node
   done
 ) &
 SG_CLEANUP_PID=$!
-# Teardown-race hardening (learned live in Phase A): the EFA SG + placement group can lag behind
+# Teardown-race hardening: the EFA SG + placement group can lag behind
 # instance termination, so the first destroy can fail on a still-referenced SG. Re-run once; the
 # second pass clears resources that were mid-deletion.
 if ! terraform -chdir="${CLUSTER_TF}" destroy -auto-approve -input=false \
      -var "region=${EFA_AWS_REGION}" -var "cluster_name=${EFA_CLUSTER_NAME}" \
      -var "availability_zone=${EFA_AZ}" \
      -var "capacity_reservation_id=${EFA_CR_ID}" \
-     -var "capacity_type=${CAPACITY_TYPE:-ON_DEMAND}" \
+     -var "capacity_type=${EFA_CAPACITY_TYPE}" \
      -var "enable_nat_gateway=${EFA_ENABLE_NAT}" \
      -var "enable_vpc_endpoints=${EFA_ENABLE_VPCE}"; then
   warn "cluster destroy exited non-zero (likely a lagging EFA SG / placement group); retrying once in 60s"
@@ -80,7 +80,7 @@ if ! terraform -chdir="${CLUSTER_TF}" destroy -auto-approve -input=false \
     -var "region=${EFA_AWS_REGION}" -var "cluster_name=${EFA_CLUSTER_NAME}" \
     -var "availability_zone=${EFA_AZ}" \
     -var "capacity_reservation_id=${EFA_CR_ID}" \
-    -var "capacity_type=${CAPACITY_TYPE:-ON_DEMAND}" \
+    -var "capacity_type=${EFA_CAPACITY_TYPE}" \
     -var "enable_nat_gateway=${EFA_ENABLE_NAT}" \
     -var "enable_vpc_endpoints=${EFA_ENABLE_VPCE}" || warn "second cluster destroy still failed; inspect manually"
 fi

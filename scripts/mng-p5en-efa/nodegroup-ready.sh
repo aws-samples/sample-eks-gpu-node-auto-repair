@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Await the EFA GPU managed node group and finish node-side setup. On this MNG path the 2
-# p5en.48xlarge nodes are provisioned by the cluster Terraform (Task 9) — there is NO
+# p5en.48xlarge nodes are provisioned by the cluster Terraform — there is NO
 # Karpenter pool to apply and no warm-up Deployment to force provisioning. This script only
 # waits for the nodes, installs the device plugins, and confirms EFA.
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
