@@ -12,6 +12,13 @@ pull a full node log bundle **without SSH** via the EKS-native `NodeDiagnostic` 
 
 ## How it works
 
+The flow below is the **EKS Auto Mode** path (`g6e`, `p5en-efa`), where node auto repair is
+bundled, always-on, and non-configurable. The Managed Node Group paths (`mng-g6e`,
+`mng-p5en-efa`) follow the same detect → repair → resume shape but with the node monitoring agent
+as an **add-on DaemonSet** and a **configurable** repair action per fault
+(`Replace` / `Reboot` / `NoAction`) — see
+[Configurable node repair (MNG paths)](#configurable-node-repair-mng-paths).
+
 ```
         +---------------------+
         |  GPU fault (XID 79) |
