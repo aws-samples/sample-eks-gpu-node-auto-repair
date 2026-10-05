@@ -168,7 +168,7 @@ make g6e-diagnose      # pull a node log bundle, no SSH (kubectl ekslogs)
 #   kubectl get jobset -o wide -w
 ```
 
-Run `make help` to see every target for both paths.
+Run `make help` to see every target for all paths.
 
 ## Fault injection
 
@@ -472,7 +472,7 @@ instance); a `NoAction` flips the condition to `False` but fires no repair and l
 ## Repository layout
 
 ```
-Makefile                         entry point — `make help` lists every target for both paths
+Makefile                         entry point — `make help` lists every target for all paths
 terraform/g6e/cluster            EKS Auto Mode cluster + VPC (g6e)
 terraform/g6e/storage            FSx security group + subnet lookups (g6e)
 terraform/g6e/image              ECR repo + S3 build-context bucket + CodeBuild project + IAM (g6e)
