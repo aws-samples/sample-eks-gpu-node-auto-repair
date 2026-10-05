@@ -24,8 +24,8 @@ envsubst '${TARGET_NODE} ${XID}' \
 
 log "Applied. The NMA add-on sets AcceleratedHardwareReady=False / NvidiaXID${XID}Error within seconds."
 case "${XID}" in
-  79) log "Expected repair: REPLACE after ~5 min (override). New instance ID." ;;
-  64|48) log "Expected repair: REPLACE after ~10 min (override). New instance ID." ;;
+  79) log "Expected repair: REPLACE after ~10 min (override). New instance ID." ;;
+  64|48) log "Expected repair: REPLACE after ~30 min (override). New instance ID." ;;
   63) log "Expected repair: NoAction (override). Node stays Ready; condition flips but no repair." ;;
   95) log "Expected repair: default REBOOT after ~10 min (no override). SAME instance ID." ;;
   *) log "No override for XID ${XID}; default AcceleratedHardwareReady action (Reboot @10m) applies." ;;

@@ -8,7 +8,7 @@ XID="${XID:-79}"
 export XID
 
 TARGET_NODE="$(kubectl get pod -l jobset.sigs.k8s.io/jobset-name=train \
-  -o jsonpath='{.items[0].spec.nodeName}' 2>/dev/null)"
+  -o jsonpath='{.items[0].spec.nodeName}' 2>/dev/null || true)"
 [ -n "${TARGET_NODE}" ] || TARGET_NODE="$(kubectl get nodes -l nodegroup=gpu \
   -o jsonpath='{.items[0].metadata.name}')"
 [ -n "${TARGET_NODE}" ] || die "no GPU node found"
@@ -21,8 +21,8 @@ envsubst '${TARGET_NODE} ${XID}' \
 
 log "Applied. The NMA add-on sets AcceleratedHardwareReady=False / NvidiaXID${XID}Error within seconds."
 case "${XID}" in
-  79) log "Expected repair: REPLACE after ~5 min (override). New instance ID." ;;
-  64|48) log "Expected repair: REPLACE after ~10 min (override). New instance ID." ;;
+  79) log "Expected repair: REPLACE after ~10 min (override). New instance ID." ;;
+  64|48) log "Expected repair: REPLACE after ~30 min (override). New instance ID." ;;
   63) log "Expected repair: NoAction (override). Node stays Ready; condition flips but no repair." ;;
   95) log "Expected repair: default REBOOT after ~10 min (no override). SAME instance ID." ;;
   *) log "No override for XID ${XID}; default AcceleratedHardwareReady action (Reboot @10m) applies." ;;

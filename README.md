@@ -433,10 +433,15 @@ remains visible side by side):
 
 | Injected XID | Reason code | MNG default | Override | Why |
 |---|---|---|---|---|
-| 79 (fell off bus) | NvidiaXID79Error | Reboot @10m | **Replace @5m** | Bus-level loss; a reboot cannot recover it — only a bare-metal replacement can. |
-| 48 / 64 (double-bit ECC / remap failure) | NvidiaXID64Error | Reboot @10m | **Replace @10m** | Documented tradeoff (see below). |
+| 79 (fell off bus) | NvidiaXID79Error | Reboot @10m | **Replace @10m** | Bus-level loss; a reboot cannot recover it — only a bare-metal replacement can, so replace at the earliest the API allows. |
+| 48 / 64 (double-bit ECC / remap failure) | NvidiaXID64Error | Reboot @10m | **Replace @30m** | Degrading silicon; wait longer before the destructive replace in case the fault is transient. Documented tradeoff (see below). |
 | 63 (memory remapping event) | NvidiaXID63Error | Reboot @10m | **NoAction** | Informational wear event; ride it out instead of churning the node. |
 | 95 (uncontained memory error) | NvidiaXID95Error | Reboot @10m | *(not overridden)* | Left at the default so the demo shows a real `Reboot` (same instance ID). |
+
+> **`minRepairWaitTimeMins` constraint:** the EKS API requires each override's
+> `minRepairWaitTimeMins` to be **between 10 and 120 and a multiple of 10** — values like `5` are
+> rejected at `CreateNodegroup` with `InvalidParameterException`. That is why the fastest override
+> here is `@10m`, not a shorter interval.
 
 ### The 48/64 tradeoff — documented honestly
 

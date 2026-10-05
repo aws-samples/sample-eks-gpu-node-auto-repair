@@ -41,6 +41,19 @@ module "eks" {
   # Standard EKS (NOT Auto Mode): no Auto Mode compute block. GPU capacity is an explicit
   # managed node group so node auto repair can be tuned with nodeRepairConfigOverrides.
   eks_managed_node_groups = {
+    # Small untainted node group for cluster system pods (coredns, metrics, etc.). The GPU node
+    # group below is tainted nvidia.com/gpu=NoSchedule, so without this, coredns cannot schedule
+    # and the cluster never becomes fully functional. EKS Auto Mode provides a general-purpose
+    # pool for this automatically; a standard-EKS MNG cluster must supply one explicitly.
+    system = {
+      instance_types = ["m7i.large"]
+      ami_type       = "AL2023_x86_64_STANDARD"
+      min_size       = 2
+      max_size       = 2
+      desired_size   = 2
+      labels         = { nodegroup = "system" }
+    }
+
     gpu = {
       instance_types = var.gpu_instance_types
       ami_type       = "AL2023_x86_64_NVIDIA"
@@ -66,13 +79,13 @@ module "eks" {
           {
             node_monitoring_condition = "AcceleratedHardwareReady"
             node_unhealthy_reason     = "NvidiaXID79Error"
-            min_repair_wait_time_mins = 5
+            min_repair_wait_time_mins = 10
             repair_action             = "Replace"
           },
           {
             node_monitoring_condition = "AcceleratedHardwareReady"
             node_unhealthy_reason     = "NvidiaXID64Error"
-            min_repair_wait_time_mins = 10
+            min_repair_wait_time_mins = 30
             repair_action             = "Replace"
           },
           {
@@ -90,11 +103,30 @@ module "eks" {
   # the NMA DaemonSet + NodeDiagnostic CRD; Pod Identity agent is required for FSx CSI
   # (storage layer creates the association).
   addons = {
-    coredns                   = {}
-    kube-proxy                = {}
-    vpc-cni                   = {}
-    eks-pod-identity-agent    = {}
-    eks-node-monitoring-agent = {}
+    # vpc-cni, kube-proxy and pod-identity MUST install BEFORE the node group: nodes stay
+    # NotReady until the CNI is up, but the node group create waits for nodes to be Ready — a
+    # deadlock if these install after compute. before_compute=true breaks it.
+    vpc-cni                = { before_compute = true }
+    kube-proxy             = { before_compute = true }
+    eks-pod-identity-agent = { before_compute = true }
+    # coredns needs schedulable nodes; the node monitoring agent runs on the nodes — both after.
+    coredns = {}
+    eks-node-monitoring-agent = {
+      # The agent's bundled dcgm-server DaemonSet (which runs the nv-hostengine the agent reads
+      # for GPU health) has no toleration for the GPU node taint by default, so on a cluster whose
+      # ONLY GPU nodes are tainted it never schedules — the agent then reports
+      # AcceleratedHardwareReady=False with reason DCGMError and GPU health monitoring is silently
+      # broken. Tolerate the GPU taint so dcgm-server runs on the GPU nodes.
+      configuration_values = jsonencode({
+        dcgmAgent = {
+          tolerations = [{
+            key      = "nvidia.com/gpu"
+            operator = "Exists"
+            effect   = "NoSchedule"
+          }]
+        }
+      })
+    }
   }
 
   vpc_id     = module.vpc.vpc_id
