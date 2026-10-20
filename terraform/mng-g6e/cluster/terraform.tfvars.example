@@ -1,0 +1,3 @@
+# region       = "us-west-2"
+# cluster_name = "eks-gpu-mng-node-repair"
+# gpu_desired_size = 2

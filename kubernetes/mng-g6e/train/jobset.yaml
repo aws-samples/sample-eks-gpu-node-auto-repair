@@ -1,0 +1,82 @@
+# ${IMAGE} is substituted by train.sh from .image-ref.
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: train
+spec:
+  # Recreate ALL child jobs (gang restart) on any failure, up to 3 times.
+  failurePolicy:
+    maxRestarts: 3
+    restartStrategy: Recreate
+  network:
+    enableDNSHostnames: true
+    subdomain: train
+  replicatedJobs:
+    - name: workers
+      replicas: 1
+      template:
+        spec:
+          parallelism: 2
+          completions: 2
+          backoffLimit: 0
+          template:
+            spec:
+              restartPolicy: Never
+              nodeSelector:
+                nodegroup: gpu
+              # Force one worker per node so a node failure loses exactly one rank —
+              # this is what makes the node auto-repair story meaningful. The managed
+              # node group supplies the nodes; this pod anti-affinity (not the scheduler's
+              # provisioning) is what keeps the two ranks on separate nodes.
+              affinity:
+                podAntiAffinity:
+                  requiredDuringSchedulingIgnoredDuringExecution:
+                    - labelSelector:
+                        matchExpressions:
+                          - key: jobset.sigs.k8s.io/jobset-name
+                            operator: In
+                            values: ["train"]
+                      topologyKey: kubernetes.io/hostname
+              tolerations:
+                - key: nvidia.com/gpu
+                  operator: Exists
+                  effect: NoSchedule
+              containers:
+                - name: trainer
+                  image: ${IMAGE}
+                  env:
+                    - name: MASTER_ADDR
+                      value: "train-workers-0-0.train"
+                    - name: MASTER_PORT
+                      value: "29500"
+                    - name: NNODES
+                      value: "2"
+                    - name: NODE_RANK
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+                    - name: HF_HOME
+                      value: "/fsx/hf-cache"
+                    - name: PYTHONUNBUFFERED
+                      value: "1"
+                  args:
+                    - "--nnodes=$(NNODES)"
+                    - "--nproc_per_node=1"
+                    - "--node_rank=$(NODE_RANK)"
+                    - "--master_addr=$(MASTER_ADDR)"
+                    - "--master_port=$(MASTER_PORT)"
+                    - "--rdzv_id=train"
+                    - "/workspace/train.py"
+                    - "--output-dir=/fsx/checkpoints"
+                    - "--max-steps=6000"
+                    - "--save-steps=50"
+                  resources:
+                    limits:
+                      nvidia.com/gpu: "1"
+                  volumeMounts:
+                    - name: fsx
+                      mountPath: /fsx
+              volumes:
+                - name: fsx
+                  persistentVolumeClaim:
+                    claimName: fsx-checkpoints

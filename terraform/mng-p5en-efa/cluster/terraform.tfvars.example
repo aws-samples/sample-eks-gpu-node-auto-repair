@@ -1,0 +1,16 @@
+# Example variables for the mng-p5en-efa cluster layer. Copy to terraform.tfvars and fill in
+# with the values for your account/reservation. NO real values are committed here.
+
+# AWS region that holds the capacity reservation.
+# region = "us-east-1"
+
+# Availability zone of the capacity reservation (nodes + placement group are pinned here).
+# availability_zone = "us-east-1a"
+
+# ID of the On-Demand Capacity Reservation (or Capacity Block) for the p5en nodes.
+# capacity_reservation_id = "cr-xxxxxxxxxxxxxxxxx"
+
+# Capacity type for the reservation. Use "ON_DEMAND" for a plain ODCR, or "CAPACITY_BLOCK"
+# for a Capacity Block. Confirm with:
+#   aws ec2 describe-capacity-reservations --capacity-reservation-ids $CR_ID
+# capacity_type = "ON_DEMAND"
