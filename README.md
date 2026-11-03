@@ -14,7 +14,7 @@ pull a full node log bundle **without SSH** via the EKS-native `NodeDiagnostic` 
 
 **▶ 80-second walkthrough (p5en-efa path):**
 
-<!-- VIDEO: replace this line with the GitHub user-attachments URL for the walkthrough video -->
+https://github.com/user-attachments/assets/71b9868a-b821-4fd8-b42d-b4c588f45012
 
 ## How it works
 
