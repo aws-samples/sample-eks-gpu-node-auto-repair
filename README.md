@@ -10,6 +10,12 @@ JobSet-orchestrated fine-tune **auto-resumes from a checkpoint** on FSx for Lust
 pull a full node log bundle **without SSH** via the EKS-native `NodeDiagnostic` API
 (`kubectl ekslogs`) — completing the EKS Auto Mode **detect → repair → diagnose** story.
 
+![Overview: on the p5en-efa path (2x p5en.48xlarge, 16x H200, FSDP over EFA), a GPU fault is detected in under a second, the node is repaired after the 10-minute toleration on EKS Auto Mode or per-fault on Managed Node Groups, and training resumes from a DCP checkpoint on FSx for Lustre](images/overview.png)
+
+**▶ 80-second walkthrough (p5en-efa path):**
+
+<!-- VIDEO: replace this line with the GitHub user-attachments URL for the walkthrough video -->
+
 ## How it works
 
 The flow below is the **EKS Auto Mode** path (`g6e`, `p5en-efa`), where node auto repair is
@@ -517,6 +523,7 @@ the `dcgm-server` host engine the agent reads:
 
 ```
 Makefile                         entry point — `make help` lists every target for all paths
+images/overview.drawio           overview infographic source (exported to images/overview.png)
 terraform/g6e/cluster            EKS Auto Mode cluster + VPC (g6e)
 terraform/g6e/storage            FSx security group + subnet lookups (g6e)
 terraform/g6e/image              ECR repo + S3 build-context bucket + CodeBuild project + IAM (g6e)
